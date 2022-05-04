@@ -84,7 +84,6 @@ const mainFnc = async () => {
                   rowObj += `${Object.values(value)} \n`.replace(/,/g,';').replace(/\./g,',');
               }
               headers += rowObj;
-              console.log(headers);
             writeFile(resolve(`./csv/out/${fileName}.csv`), headers, 'utf8');
             }
     
