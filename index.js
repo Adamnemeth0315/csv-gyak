@@ -2,7 +2,7 @@ const {readFile, writeFile} = require('fs').promises;
 const {resolve} = require('path');
 
 const fileData = readFile('./csv/in/open_units.csv', 'utf8');
-const fileDataHeaders = [
+const csvHeaders = [
     'Product',
     'Brand',
     'Category',
@@ -14,81 +14,98 @@ const fileDataHeaders = [
     'ABV',
     'Units of Alcohol',
     'Units (4 Decimal Places)',
-    'Units per 100ml \n',
+    'Units per 100ml',
 ];
 
-const write = async (fileContent) => {
+const writeHunCSV = async (data) => {
     try {
-        const data = await fileContent;
-        const fileContentWithHeaders = fileDataHeaders.concat(data.split(','));
-        const dataString = fileContentWithHeaders.join(';');
-        const hunFormatData = dataString.replace(/\./g, ',');
-        const deleteFirstComma = hunFormatData.replace('\n;', '\n');
-        await writeFile('./csv/out/open_units_hun.csv', deleteFirstComma, 'utf8');
+        const headerString = csvHeaders.join(';');
+        const contentString = data.split(',').join(';').replace(/\./g, ',');
+        const hunFormatData = `${headerString}\n${contentString}`;
 
+        await writeFile('./csv/out/open_units_hun.csv', hunFormatData, 'utf8');
+
+        return true;
     } catch (err) {
-        console.log(err);
+        throw new Error(err);
     }
 }
 
-const createNewFileByCategory = async () => {
+/**
+ * Creates array of objects from csv & header data.
+ * @param {string} rawStringData - Raw csv file read as string.
+ * @param {string[]} headers - Array of headers for the csv data.
+ * @return {Array<{}>} The array of objects.
+*/
+const createObjectArray = (rawStringData, headers) => {
     try {
-        let data = await readFile('./csv/in/open_units.csv', 'utf8');
-        const dataArray = data.split('\n');
-        let dataRows = [];
-        let dataObjectsArray = [];
-        
-        for(let i=1; i< dataArray.length -1; i++) {
-            let dataRow = dataArray[i].split(',');
-            dataRows.push(dataRow)
-        }
+        const rowArray = rawStringData.split('\n');
+        rowArray.pop();
 
-        for(let i=0; i< dataRows.length; i++) {
+        const rowObjectData = [];
+
+        for(let row of rowArray) {
+            const cellArray = row.split(',');
+            if (cellArray.length !== headers.length) throw new Error(`Row and header length mismatch! Row: ${cellArray.length}, Row: ${headers.length}`);
             let dataObj = {};
 
-            for(let j = 0; j < fileDataHeaders.length; j++) {
-                dataObj[fileDataHeaders[j]] = dataRows[i][j];
+            for(let i in headers) {
+              dataObj[headers[i]] = cellArray[i];
             }
-            dataObjectsArray.push(dataObj); 
+
+            rowObjectData.push(dataObj);
         }
-        return dataObjectsArray;
-        
+
+        return rowObjectData;
     } catch(error) {
-        console.log(error);
+        throw new Error(err);
     }
 }
 
-write(fileData);
+/**
+ * Creates filtered file from rowObjectData & header data.
+ * @param {Array<{}>} rowData - Array of objects.
+ * @return {Boolean} Return true if file is done.
+*/
 
-const mainFnc = async () => {
-    await write(fileData);
-    createNewFileByCategory().then(data => {
-        const filteredDataObject=  data.reduce( (acc, obj) => {
-            let key = obj['Category']
-            if (!acc[key]) {
-              acc[key] = []
-            }
-            acc[key].push(obj)
-            return acc
-          }, {})
-          const filteredDataObjectsArray = Object.entries(filteredDataObject);
-        
-          for(let value of filteredDataObjectsArray){
-              
-              const fileName = value[0];
-              let fileContent = value[1];
-              let rowObj = '';
-              let headers =  fileDataHeaders.join(';');
-            
-              for(let value of Object.values(fileContent)){
-                  rowObj += `${Object.values(value)} \n`.replace(/,/g,';').replace(/\./g,',');
-              }
-              headers += rowObj;
-            writeFile(resolve(`./csv/out/${fileName}.csv`), headers, 'utf8');
-            }
+const writeHunCSVByCategory = (rowData) => {
+  const dataByCategory =  rowData.reduce( (acc, obj) => {
+    let key = obj['Category'];
+
+    if (!acc[key]) {
+      acc[key] = []
+    }
+
+    acc[key].push(obj);
+
+    return acc
+  }, {});
+
+  const categoryEntries = Object.entries(dataByCategory);
+
+  for(let [category, data] of categoryEntries){
+      const fileName = category.toLocaleLowerCase();
+      let contentStringAcc = '';
+      let headers =  csvHeaders.join(';');
     
-    });
+      for(let value of Object.values(data)) {
+          contentStringAcc += `${Object.values(value).join(';')} \n`.replace(/\./g,',');
+      }
+
+      const dataToWrite = `${headers}\n${contentStringAcc}`;
+
+      writeFile(resolve(`./csv/out/${fileName}.csv`), dataToWrite, 'utf8');
+    }
     return true;
 }
-mainFnc();
 
+const mainFnc = async () => {
+  const dataObjectsArray = createObjectArray(await fileData, csvHeaders);
+
+  writeHunCSVByCategory(dataObjectsArray);
+
+  writeHunCSV(await fileData);
+
+}
+
+mainFnc();
